@@ -1,0 +1,2 @@
+[env:custom_build]
+extends = env:esp32c3dev
