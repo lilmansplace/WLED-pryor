@@ -29,20 +29,20 @@ jobs:
         echo '[env:drchop]' >>platformio.ini
         echo 'extends = env:esp32c3dev' >>platformio.ini
         
-        pio run -e custom_build || pio run -e custom_build
+        pio run -e drchop || pio run -e drchop
     - name: Copy Files
       run: |
         cd $GITHUB_WORKSPACE
         git rm -r $GITHUB_WORKSPACE/*.bin || true
         WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
-        cp ${WLEDFOLDERNAME}/build_output/firmware/custom_build.bin $GITHUB_WORKSPACE/
+        cp ${WLEDFOLDERNAME}/build_output/firmware/drchop.bin $GITHUB_WORKSPACE/
         date -I | tr -d '\n' >$GITHUB_WORKSPACE/last_update_date.txt
     - name: Commit Files
       run: |
         cd $GITHUB_WORKSPACE
         git config user.name "GitHub Actions Bot"
         git config user.email "<>"
-        git add $GITHUB_WORKSPACE/custom_build.bin
+        git add $GITHUB_WORKSPACE/drchop.bin
         git add $GITHUB_WORKSPACE/last_update_date.txt
-        git commit -m "Commit Custom Build"
+        git commit -m "Commit drchop Build"
         git push origin main
