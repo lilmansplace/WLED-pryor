@@ -27,7 +27,7 @@ jobs:
         find /tmp/WLEDtemp -maxdepth 1 -mindepth 1 -name "*" -type d >> /tmp/WLEDtemp/wledfoldername
         cd `cat /tmp/WLEDtemp/wledfoldername`
         npm install
-        pio run
+        pio run -e WLED_SAL001S -e WLED_drchop_corner_lamp
     - name: Copy Files
       run: |
         cd $GITHUB_WORKSPACE
