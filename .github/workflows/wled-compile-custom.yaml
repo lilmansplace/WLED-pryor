@@ -1,4 +1,4 @@
-name: WLED compile
+name: WLED compile custom devices
 
 on:
     workflow_dispatch:
