@@ -9,3 +9,44 @@ on:
 jobs:
   wled_build:
     uses: ./.github/workflows/build.yml
+
+  release:
+    name: Create Release
+    needs: wled_build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get upstream version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "unknown")
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: custom-${{ steps.version.outputs.tag }}
+          name: Custom Build ${{ steps.version.outputs.tag }}
+          body: |
+            Custom WLED firmware based on upstream [${{ steps.version.outputs.tag }}](https://github.com/wled/WLED/releases/tag/${{ steps.version.outputs.tag }}).
+
+            **Devices:**
+            | File | Hardware |
+            |------|----------|
+            | `WLED_SAL001S` | ESP8266 NodeMCU with rotary encoder |
+            | `WLED_drchop_corner_lamp` | ESP32-C3 corner lamp |
+          files: artifacts/**/*.bin
+          make_latest: true

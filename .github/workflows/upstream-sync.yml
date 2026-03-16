@@ -1,0 +1,121 @@
+name: Upstream Sync
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6am UTC
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Check for new upstream release
+    runs-on: ubuntu-latest
+    outputs:
+      needs_update: ${{ steps.check.outputs.needs_update }}
+      upstream_tag: ${{ steps.upstream.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: custom-builds
+          fetch-depth: 0
+
+      - name: Get latest upstream stable release
+        id: upstream
+        run: |
+          TAG=$(curl -s https://api.github.com/repos/wled/WLED/releases/latest | jq -r '.tag_name')
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Latest upstream release: $TAG"
+
+      - name: Fetch upstream tags
+        run: |
+          git remote add upstream https://github.com/wled/WLED.git
+          git fetch upstream --tags
+
+      - name: Check if already synced
+        id: check
+        run: |
+          TAG=${{ steps.upstream.outputs.tag }}
+          if git merge-base --is-ancestor "$TAG" HEAD; then
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+            echo "Already based on $TAG, nothing to do"
+          else
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+            echo "New upstream release $TAG detected"
+          fi
+
+  build-and-release:
+    name: Rebase, Build & Release
+    needs: check
+    if: needs.check.outputs.needs_update == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      UPSTREAM_TAG: ${{ needs.check.outputs.upstream_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: custom-builds
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream tags
+        run: |
+          git remote add upstream https://github.com/wled/WLED.git
+          git fetch upstream --tags
+
+      - name: Rebase onto upstream tag
+        run: git rebase "$UPSTREAM_TAG"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.buildcache
+          key: pio-${{ runner.os }}-${{ needs.check.outputs.upstream_tag }}-${{ hashFiles('platformio.ini', 'platformio_override.ini', 'pio-scripts/output_bins.py') }}-${{ hashFiles('wled00/**', 'usermods/**') }}
+          restore-keys: pio-${{ runner.os }}-${{ needs.check.outputs.upstream_tag }}-${{ hashFiles('platformio.ini', 'platformio_override.ini', 'pio-scripts/output_bins.py') }}-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install PlatformIO
+        run: pip install -r requirements.txt
+
+      - name: Build WLED_SAL001S
+        run: pio run -e WLED_SAL001S
+
+      - name: Build WLED_drchop_corner_lamp
+        run: pio run -e WLED_drchop_corner_lamp
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: custom-${{ needs.check.outputs.upstream_tag }}
+          name: Custom Build ${{ needs.check.outputs.upstream_tag }}
+          body: |
+            Custom WLED firmware based on upstream [${{ needs.check.outputs.upstream_tag }}](https://github.com/wled/WLED/releases/tag/${{ needs.check.outputs.upstream_tag }}).
+
+            **Devices:**
+            | File | Hardware |
+            |------|----------|
+            | `WLED_SAL001S` | ESP8266 NodeMCU with rotary encoder |
+            | `WLED_drchop_corner_lamp` | ESP32-C3 corner lamp |
+          files: build_output/release/*.bin
+          make_latest: true
+
+      - name: Push rebased branch
+        run: git push origin custom-builds --force
