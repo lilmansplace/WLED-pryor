@@ -27,6 +27,8 @@ jobs:
       - name: Get upstream version
         id: version
         run: |
+          git remote add upstream https://github.com/wled/WLED.git
+          git fetch upstream --tags --quiet
           VERSION=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "unknown")
           echo "tag=$VERSION" >> $GITHUB_OUTPUT
 
